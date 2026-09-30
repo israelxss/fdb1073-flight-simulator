@@ -1,0 +1,1547 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>סימולטור טיסה FDB1073 - זמן אמת 1:1 בדיוק כפי שהוקלט</title>
+    <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script src="flight_data.js"></script>
+    <style>
+        :root {
+            --bg-primary: #0a0e17;
+            --bg-secondary: #121826;
+            --card-bg: rgba(22, 31, 48, 0.75);
+            --border-color: rgba(255, 255, 255, 0.08);
+            --accent-cyan: #00f2fe;
+            --accent-blue: #4facfe;
+            --accent-red: #ff3366;
+            --accent-warning: #ffaa00;
+            --accent-green: #00e676;
+            --text-main: #f0f4f8;
+            --text-dim: #94a3b8;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Assistant', sans-serif;
+            background-color: var(--bg-primary);
+            color: var(--text-main);
+            height: 100vh;
+            max-height: 100vh;
+            overflow: hidden;
+            padding: 8px 12px;
+            background-image: 
+                radial-gradient(circle at 10% 20%, rgba(0, 242, 254, 0.05) 0%, transparent 45%),
+                radial-gradient(circle at 90% 80%, rgba(255, 51, 102, 0.05) 0%, transparent 45%);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 100%;
+            height: 100%;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            overflow: hidden;
+        }
+
+        /* Compact Header */
+        header {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 6px 14px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            backdrop-filter: blur(12px);
+            flex-shrink: 0;
+            height: 42px;
+        }
+
+        .title-group {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .title-group h1 {
+            font-size: 16px;
+            font-weight: 800;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin: 0;
+            white-space: nowrap;
+        }
+
+        .title-group p {
+            color: var(--text-dim);
+            font-size: 11px;
+            margin: 0;
+            white-space: nowrap;
+        }
+
+        .badge-live {
+            background: rgba(0, 242, 254, 0.15);
+            color: var(--accent-cyan);
+            border: 1px solid rgba(0, 242, 254, 0.4);
+            padding: 3px 10px;
+            border-radius: 14px;
+            font-weight: 700;
+            font-size: 11px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            white-space: nowrap;
+        }
+
+        .badge-live::before {
+            content: '';
+            width: 6px;
+            height: 6px;
+            background-color: var(--accent-cyan);
+            border-radius: 50%;
+            box-shadow: 0 0 8px var(--accent-cyan);
+            animation: pulse 1.2s infinite alternate;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 0.3; transform: scale(0.8); }
+            100% { opacity: 1; transform: scale(1.2); }
+        }
+
+        /* Main Single Screen Layout: Left visual + Telemetry, Center Charts, Right Log */
+        .dashboard-body {
+            flex: 1;
+            display: grid;
+            grid-template-columns: 460px 1fr 280px;
+            gap: 6px;
+            min-height: 0;
+            overflow: hidden;
+        }
+
+        @media (max-width: 1300px) {
+            .dashboard-body {
+                grid-template-columns: 400px 1fr 250px;
+            }
+        }
+
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 8px 10px;
+            backdrop-filter: blur(12px);
+            box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            min-height: 0;
+            overflow: hidden;
+        }
+
+        .card-header {
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 6px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+        }
+
+        /* Left Column: Side View + Artificial Horizon + Metrics */
+        .left-column {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            min-height: 0;
+            overflow: hidden;
+        }
+
+        .visuals-split {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            flex: 1;
+            min-height: 0;
+        }
+
+        .visual-cube {
+            flex: 1;
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 8px 10px;
+            backdrop-filter: blur(12px);
+            box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            min-height: 0;
+            overflow: hidden;
+        }
+
+        /* Side View of Airplane */
+        .side-view-container {
+            flex: 1;
+            width: 100%;
+            background: linear-gradient(180deg, #091224 0%, #152238 60%, #1b1612 100%);
+            border-radius: 8px;
+            border: 1px solid rgba(255,255,255,0.06);
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 120px;
+        }
+
+        .grid-lines {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background-image: 
+                linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px);
+            background-size: 25px 25px;
+            pointer-events: none;
+        }
+
+        .airplane-side-wrapper {
+            position: absolute;
+            width: 180px;
+            height: 70px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transform-origin: 50% 50%;
+            transition: transform 0.08s ease-out;
+            filter: drop-shadow(0 6px 12px rgba(0,0,0,0.6));
+        }
+
+        .plane-svg {
+            width: 100%;
+            height: 100%;
+        }
+
+        .protractor {
+            position: absolute;
+            width: 160px;
+            height: 160px;
+            border-radius: 50%;
+            border: 1px dashed rgba(0, 242, 254, 0.25);
+            pointer-events: none;
+        }
+
+        .protractor::after {
+            content: '';
+            position: absolute;
+            top: 50%; left: -10px; right: -10px;
+            height: 1px;
+            background: rgba(0, 242, 254, 0.4);
+        }
+
+        .angle-tag {
+            position: absolute;
+            top: 6px;
+            left: 6px;
+            background: rgba(10, 14, 23, 0.85);
+            border: 1px solid var(--accent-cyan);
+            border-radius: 6px;
+            padding: 2px 6px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--accent-cyan);
+            direction: ltr;
+        }
+
+        .flight-dir-tag {
+            position: absolute;
+            bottom: 6px;
+            right: 6px;
+            background: rgba(10, 14, 23, 0.85);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 6px;
+            padding: 2px 6px;
+            font-size: 9px;
+            color: var(--text-dim);
+        }
+
+        /* Artificial Horizon Box */
+        .attitude-box {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            justify-content: space-around;
+            flex: 1;
+            width: 100%;
+            background: #0d131f;
+            border-radius: 8px;
+            padding: 6px 16px;
+            border: 1px solid rgba(255,255,255,0.06);
+            gap: 16px;
+            min-height: 120px;
+        }
+
+        .attitude-indicator {
+            width: 105px;
+            height: 105px;
+            border-radius: 50%;
+            border: 3px solid #2d3748;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 0 15px rgba(0, 242, 254, 0.2);
+            background: #111;
+            flex-shrink: 0;
+        }
+
+        .horizon-sphere {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            transform-origin: center center;
+            transition: transform 0.08s linear;
+        }
+
+        .sky {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 50%;
+            background: linear-gradient(180deg, #094775 0%, #1a7ab8 100%);
+        }
+
+        .ground {
+            position: absolute;
+            bottom: 0; left: 0; width: 100%; height: 50%;
+            background: linear-gradient(180deg, #784421 0%, #44240f 100%);
+        }
+
+        .airplane-crosshair {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            width: 50px;
+            height: 3px;
+            background: #ffea00;
+            box-shadow: 0 0 6px rgba(255, 234, 0, 0.8);
+            border-radius: 2px;
+        }
+
+        .airplane-crosshair::before {
+            content: '';
+            position: absolute;
+            top: -6px; left: 50%;
+            transform: translateX(-50%);
+            width: 3px; height: 8px;
+            background: #ffea00;
+        }
+
+        .attitude-mini-data {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            gap: 2px;
+            text-align: center;
+        }
+
+        .attitude-mini-label {
+            font-size: 9px;
+            color: var(--text-dim);
+        }
+
+        .attitude-mini-val {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--accent-cyan);
+            direction: ltr;
+        }
+
+        /* Metrics Row */
+        .metrics-row {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 6px;
+            flex-shrink: 0;
+        }
+
+        .metric-box {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            padding: 4px 6px;
+            border-radius: 8px;
+            text-align: right;
+            backdrop-filter: blur(12px);
+        }
+
+        .metric-label {
+            font-size: 10px;
+            color: var(--text-dim);
+            margin-bottom: 2px;
+            white-space: nowrap;
+        }
+
+        .metric-val {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--accent-cyan);
+            direction: ltr;
+            text-align: left;
+            white-space: nowrap;
+        }
+
+        .metric-val.alert {
+            color: var(--accent-red);
+            animation: textGlow 0.8s infinite alternate;
+        }
+
+        @keyframes textGlow {
+            0% { text-shadow: 0 0 4px var(--accent-red); }
+            100% { text-shadow: 0 0 10px var(--accent-red); }
+        }
+
+        /* Center Column: Charts */
+        .center-column {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            min-height: 0;
+            overflow: hidden;
+        }
+
+        .charts-container {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            flex: 1;
+            min-height: 0;
+        }
+
+        .chart-box {
+            flex: 1;
+            min-height: 0;
+            position: relative;
+        }
+
+        /* Right Column: Timeline Events */
+        .right-column {
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            overflow: hidden;
+        }
+
+        .timeline-events {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            flex: 1;
+            overflow-y: auto;
+            padding-left: 4px;
+            min-height: 0;
+        }
+
+        .timeline-events::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .timeline-events::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 4px;
+        }
+
+        .event-item {
+            background: rgba(10, 14, 23, 0.6);
+            border-right: 3px solid var(--accent-blue);
+            border-radius: 6px;
+            padding: 5px 8px;
+            font-size: 11px;
+            cursor: pointer;
+            transition: all 0.2s;
+            flex-shrink: 0;
+        }
+
+        .event-item:hover, .event-item.active {
+            background: rgba(0, 242, 254, 0.15);
+            transform: translateX(-3px);
+        }
+
+        .event-item.severe {
+            border-right-color: var(--accent-red);
+        }
+
+        .event-item.warning {
+            border-right-color: var(--accent-warning);
+        }
+
+        .event-time {
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 700;
+            font-size: 10px;
+            color: var(--accent-cyan);
+            direction: ltr;
+            text-align: right;
+        }
+
+        .event-desc {
+            color: #cbd5e1;
+            line-height: 1.25;
+            font-size: 10px;
+        }
+
+        /* Bottom Controls Section */
+        .controls-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 6px 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            backdrop-filter: blur(12px);
+            flex-shrink: 0;
+            height: 64px;
+        }
+
+        .slider-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .slider-header {
+            display: flex;
+            gap: 8px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            color: var(--accent-cyan);
+            direction: ltr;
+            white-space: nowrap;
+            min-width: 180px;
+        }
+
+        input[type="range"] {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            background: #1a2336;
+            outline: none;
+            cursor: pointer;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: var(--accent-cyan);
+            cursor: pointer;
+            box-shadow: 0 0 8px var(--accent-cyan);
+            border: 2px solid #fff;
+        }
+
+        .buttons-row {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+            flex-wrap: nowrap;
+            overflow-x: auto;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, rgba(0, 242, 254, 0.1), rgba(79, 172, 254, 0.2));
+            color: var(--text-main);
+            border: 1px solid var(--accent-cyan);
+            padding: 4px 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 700;
+            font-size: 11px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+
+        .btn:hover {
+            background: var(--accent-cyan);
+            color: #000;
+            box-shadow: 0 0 10px rgba(0, 242, 254, 0.4);
+        }
+
+        .btn-jump {
+            border-color: rgba(255, 255, 255, 0.15);
+            background: rgba(255, 255, 255, 0.05);
+            font-size: 10px;
+            padding: 3px 8px;
+        }
+
+        .btn-jump:hover {
+            background: rgba(255, 255, 255, 0.15);
+            color: #fff;
+        }
+
+        .speed-toggle {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 11px;
+            white-space: nowrap;
+        }
+
+        html[dir="rtl"] .speed-toggle {
+            margin-right: auto;
+        }
+
+        html[dir="ltr"] .speed-toggle {
+            margin-left: auto;
+        }
+
+        .speed-toggle select, .lang-select {
+            background: #121826;
+            color: #fff;
+            border: 1px solid var(--border-color);
+            padding: 2px 6px;
+            border-radius: 6px;
+            font-size: 11px;
+            cursor: pointer;
+        }
+
+        .lang-select {
+            border-color: var(--accent-cyan);
+            background: rgba(0, 242, 254, 0.1);
+            color: var(--accent-cyan);
+            font-weight: 700;
+        }
+
+        html[dir="ltr"] .event-item {
+            border-right: none;
+            border-left: 3px solid var(--accent-blue);
+        }
+
+        html[dir="ltr"] .event-item.severe {
+            border-left-color: var(--accent-red);
+        }
+
+        html[dir="ltr"] .event-item.warning {
+            border-left-color: var(--accent-warning);
+        }
+
+        html[dir="ltr"] .event-item:hover, html[dir="ltr"] .event-item.active {
+            transform: translateX(3px);
+        }
+
+        html[dir="ltr"] .event-time {
+            text-align: left;
+        }
+
+        html[dir="ltr"] .flight-dir-tag {
+            right: auto;
+            left: 6px;
+        }
+
+        html[dir="ltr"] .angle-tag {
+            left: auto;
+            right: 6px;
+        }
+
+        /* Banner */
+        .flight-alert-banner {
+            display: none;
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-weight: 700;
+            font-size: 11px;
+            margin-bottom: 4px;
+            flex-shrink: 0;
+        }
+
+        .flight-alert-banner.active {
+            display: block;
+        }
+
+        .flight-alert-banner.critical {
+            background: rgba(255, 51, 102, 0.25);
+            border: 1px solid var(--accent-red);
+            color: #ff80a0;
+        }
+
+        .flight-alert-banner.warning {
+            background: rgba(255, 170, 0, 0.25);
+            border: 1px solid var(--accent-warning);
+            color: #ffcc66;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <!-- Header -->
+    <header>
+        <div class="title-group">
+            <h1 data-i18n="app_title">סימולטור טיסה FDB1073 (A6-FKF)</h1>
+            <p data-i18n="app_subtitle">שחזור שנייה-אחר-שנייה מנתוני ADS-B גרנולריים | דובאי ➔ תבוכ</p>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <select id="langSelect" class="lang-select">
+                <option value="he">🇮🇱 עברית</option>
+                <option value="en">🇺🇸 English</option>
+            </select>
+            <label class="btn btn-jump" style="cursor: pointer; margin: 0; background: rgba(0, 242, 254, 0.1); border-color: var(--accent-cyan);">
+                <span data-i18n="load_csv">📁 טען קובץ CSV</span>
+                <input type="file" id="csvFileInput" accept=".csv" style="display: none;">
+            </label>
+            <div class="badge-live" id="flightStateBadge" data-i18n="status_realtime">זמן אמת (1x)</div>
+        </div>
+    </header>
+
+    <!-- Main Dashboard Body: 3 Columns without scrolling -->
+    <div class="dashboard-body">
+
+        <!-- Column 1: Visuals & Telemetry Numbers -->
+        <div class="left-column">
+            <!-- Cube 1: Side View -->
+            <div class="card visual-cube">
+                <div class="card-header">
+                    <span data-i18n="side_view_title">מבט צד על המטוס</span>
+                    <span style="font-size: 10px; color: var(--accent-cyan);" id="sideViewMode">זווית נטייה: 0°</span>
+                </div>
+                <div class="side-view-container">
+                    <div class="grid-lines"></div>
+                    <div class="protractor"></div>
+                    <div class="angle-tag" id="sideAngleTag">PITCH: +0.0°</div>
+                    <div class="flight-dir-tag" id="sideFlightDir" data-i18n="nose_direction">➔ חרטום ימינה</div>
+
+                    <div class="airplane-side-wrapper" id="sideAirplane">
+                        <svg class="plane-svg" viewBox="0 0 520 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M495 90 C480 82 430 75 360 75 L120 75 C90 75 60 78 35 84 C20 88 5 91 2 92 C10 94 30 96 50 98 C80 100 120 102 360 102 C430 102 480 97 495 90 Z" fill="#e2e8f0" stroke="#94a3b8" stroke-width="2"/>
+                            <path d="M495 90 C490 85 470 80 440 78 L450 90 Z" fill="#cbd5e1"/>
+                            <path d="M472 84 L456 81 L446 81 L458 87 Z" fill="#00f2fe"/>
+                            <path d="M60 76 L25 15 C22 10 16 10 10 14 C8 16 10 24 16 35 L45 76 Z" fill="#2563eb" stroke="#1d4ed8" stroke-width="2"/>
+                            <path d="M35 30 L22 18 C28 16 34 22 35 30 Z" fill="#ffaa00"/>
+                            <path d="M40 90 L8 86 C5 85 3 87 4 89 L32 96 Z" fill="#64748b"/>
+                            <path d="M290 86 L220 120 C215 123 210 122 212 118 L255 85 Z" fill="#cbd5e1" stroke="#94a3b8" stroke-width="1.5"/>
+                            <ellipse cx="270" cy="104" rx="34" ry="13" fill="#334155" stroke="#1e293b" stroke-width="2"/>
+                            <ellipse cx="295" cy="104" rx="6" ry="11" fill="#00f2fe"/>
+                            <path d="M120 86 H430" stroke="#0f172a" stroke-width="3" stroke-dasharray="4 6"/>
+                        </svg>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Cube 2: Artificial Horizon -->
+            <div class="card visual-cube">
+                <div class="card-header">
+                    <span data-i18n="attitude_indicator_title">אופק מלאכותי (Attitude Indicator)</span>
+                    <span style="font-size: 10px; color: var(--accent-cyan);" id="valPitchAttitude">+0.0°</span>
+                </div>
+                <div class="attitude-box">
+                    <div class="attitude-indicator">
+                        <div class="horizon-sphere" id="horizonSphere">
+                            <div class="sky"></div>
+                            <div class="ground"></div>
+                        </div>
+                        <div class="airplane-crosshair"></div>
+                    </div>
+                    <div class="attitude-mini-data">
+                        <div class="attitude-mini-label" data-i18n="g_load_mini">עומס כבידה</div>
+                        <div class="attitude-mini-val" id="valGAttitude">1.00 G</div>
+                        <div class="attitude-mini-label" style="margin-top:6px;" data-i18n="controls_status_mini">מצב הגאים</div>
+                        <div class="attitude-mini-val" id="valControlState" style="color: var(--accent-green); font-size:12px;">מאוזן</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Numbers Bar -->
+            <div class="metrics-row">
+                <div class="metric-box">
+                    <div class="metric-label" data-i18n="metric_alt">גובה (ALT)</div>
+                    <div class="metric-val" id="valAlt">0 ft</div>
+                </div>
+                <div class="metric-box">
+                    <div class="metric-label" data-i18n="metric_gs">מהירות (GS)</div>
+                    <div class="metric-val" id="valGS">0 kts</div>
+                </div>
+                <div class="metric-box">
+                    <div class="metric-label" data-i18n="metric_vs">אנכי (VS)</div>
+                    <div class="metric-val" id="valVS">0 fpm</div>
+                </div>
+                <div class="metric-box">
+                    <div class="metric-label" data-i18n="metric_pitch">זווית (&gamma;)</div>
+                    <div class="metric-val" id="valPitch">+0.0°</div>
+                </div>
+                <div class="metric-box">
+                    <div class="metric-label" data-i18n="metric_g">עומס (G)</div>
+                    <div class="metric-val" id="valG">1.00 G</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Column 2: Center Graphs -->
+        <div class="center-column">
+            <div class="card" style="flex: 1;">
+                <div class="card-header">
+                    <span data-i18n="chart_title">פרופיל גובה, מהירות ועומסי G מסונכרנים (עם סמן חי)</span>
+                    <span style="font-size: 10px; color: var(--accent-cyan);" id="chartCursorTime">05:21:00 UTC</span>
+                </div>
+                <div class="flight-alert-banner" id="alertBanner"></div>
+                <div class="charts-container">
+                    <div class="chart-box">
+                        <canvas id="altitudeChart"></canvas>
+                    </div>
+                    <div class="chart-box">
+                        <canvas id="dynamicsChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Column 3: Timeline Events -->
+        <div class="right-column">
+            <div class="card" style="height: 100%;">
+                <div class="card-header">
+                    <span data-i18n="key_events_title">אירועי מפתח</span>
+                </div>
+                <div class="timeline-events" id="timelineEventsContainer">
+                    <div class="event-item" onclick="jumpToTime('05:21:00')">
+                        <div class="event-time">05:21:00 UTC</div>
+                        <div class="event-desc" data-i18n-event="ev_1"><strong>תחילת אירוע החירום:</strong> שיוט אחרון ב-34,000 רגל, תחילת מאבק.</div>
+                    </div>
+                    <div class="event-item severe" onclick="jumpToTime('05:22:15')">
+                        <div class="event-time">05:22:15 UTC</div>
+                        <div class="event-desc" data-i18n-event="ev_2"><strong>צלילה חופשית:</strong> צניחה ב-<strong>-32,640 רגל/דקה</strong>, עומס 0G.</div>
+                    </div>
+                    <div class="event-item severe" onclick="jumpToTime('05:22:36')">
+                        <div class="event-time">05:22:36 UTC</div>
+                        <div class="event-desc" data-i18n-event="ev_3"><strong>מהירות שיא בתחתית:</strong> 16,600 רגל במהירות <strong>598 קשר</strong>.</div>
+                    </div>
+                    <div class="event-item warning" onclick="jumpToTime('05:22:50')">
+                        <div class="event-time">05:22:50 UTC</div>
+                        <div class="event-desc" data-i18n-event="ev_4"><strong>משיכת חרום (Pull-Up):</strong> עומס של <strong>+2.8G</strong> ונסיקה ל-21,725 רגל.</div>
+                    </div>
+                    <div class="event-item severe" onclick="jumpToTime('05:23:40')">
+                        <div class="event-time">05:23:40 UTC</div>
+                        <div class="event-desc" data-i18n-event="ev_5"><strong>צלילה שנייה:</strong> צניחה נוספת עד ל-14,950 רגל.</div>
+                    </div>
+                    <div class="event-item" onclick="jumpToTime('05:25:00')">
+                        <div class="event-time">05:25:00 UTC</div>
+                        <div class="event-desc" data-i18n-event="ev_6"><strong>השתלטות וייצוב:</strong> מיוצב ב-14,500 רגל לקראת פנייה לתבוכ.</div>
+                    </div>
+                    <div class="event-item" onclick="jumpToTime('03:05:00')">
+                        <div class="event-time">03:05:00 UTC</div>
+                        <div class="event-desc" data-i18n-event="ev_7"><strong>המראה מדובאי (DXB):</strong> ריצת מסלול וטיפוס.</div>
+                    </div>
+                    <div class="event-item" onclick="jumpToTime('06:58:30')">
+                        <div class="event-time">06:58:30 UTC</div>
+                        <div class="event-desc" data-i18n-event="ev_8"><strong>נחיתת חירום:</strong> נגיעה במסלול בתבוכ (TUU).</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Bottom Controls -->
+    <div class="controls-card">
+        <div class="slider-wrapper">
+            <div class="slider-header">
+                <span id="currentTimeDisplay">05:21:00 UTC</span>
+                <span id="currentStatusMini" data-i18n="status_steady_cruise">שיוט יציב</span>
+            </div>
+            <input type="range" id="timeSlider" min="0" max="10000" value="0">
+        </div>
+
+        <div class="buttons-row">
+            <button class="btn" id="btnPlayPause" data-i18n="btn_play">▶ הפעל בזמן אמת (1:1)</button>
+            <button class="btn btn-jump" onclick="jumpToTime('05:21:00')" data-i18n="jump_0521">05:21 תחילת מאבק</button>
+            <button class="btn btn-jump" onclick="jumpToTime('05:22:15')" data-i18n="jump_0522_dive">05:22 צלילה חופשית</button>
+            <button class="btn btn-jump" onclick="jumpToTime('05:22:50')" data-i18n="jump_0522_g">05:22 משיכת G</button>
+            <button class="btn btn-jump" onclick="jumpToTime('05:23:40')" data-i18n="jump_0523_dive">05:23 צלילה שנייה</button>
+            <button class="btn btn-jump" onclick="jumpToTime('05:25:00')" data-i18n="jump_0525_stable">05:25 ייצוב</button>
+            <button class="btn btn-jump" onclick="jumpToTime('03:05:00')" data-i18n="jump_takeoff">03:05 המראה</button>
+            <button class="btn btn-jump" onclick="jumpToTime('06:55:00')" data-i18n="jump_landing">06:55 נחיתה</button>
+
+            <div class="speed-toggle">
+                <span data-i18n="label_speed">מהירות:</span>
+                <select id="playbackSpeed">
+                    <option value="1" selected data-i18n="speed_1x">1x (זמן אמת)</option>
+                    <option value="2">2x</option>
+                    <option value="5">5x</option>
+                    <option value="15">15x</option>
+                    <option value="30">30x</option>
+                </select>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+
+<script>
+    // Internationalization (i18n) Dictionary & Engine
+    const i18n = {
+        he: {
+            title: "סימולטור טיסה FDB1073 - זמן אמת 1:1 בדיוק כפי שהוקלט",
+            app_title: "סימולטור טיסה FDB1073 (A6-FKF)",
+            app_subtitle: "שחזור שנייה-אחר-שנייה מנתוני ADS-B גרנולריים | דובאי ➔ תבוכ",
+            load_csv: "📁 טען קובץ CSV",
+            status_realtime: "זמן אמת (1x)",
+            side_view_title: "מבט צד על המטוס",
+            pitch_angle_prefix: "זווית נטייה: ",
+            nose_direction: "➔ חרטום ימינה",
+            attitude_indicator_title: "אופק מלאכותי (Attitude Indicator)",
+            g_load_mini: "עומס כבידה",
+            controls_status_mini: "מצב הגאים",
+            control_neutral: "מאוזן",
+            control_pitch_down: "הדחקת חרטום אלימה (Nose Down)",
+            control_pitch_up: "משיכת הגאים מסיבית (Nose Up)",
+            control_climb: "נסיקה חדה",
+            status_catastrophic_dive: "צלילה קטסטרופלית!",
+            status_heavy_pullup: "עומס משיכה כבד (Pull-Up)",
+            status_climbing: "נסיקה",
+            status_on_ground: "על הקרקע",
+            status_steady_cruise: "שיוט יציב",
+            status_controlled_flight: "טיסה מבוקרת",
+            banner_critical: (pitch, vs) => `⚠ אזהרת קריסה: ירידת חרטום חריפה בזווית ${pitch}° וקצב נפילה של ${vs} רגל לדקה!`,
+            banner_warning: (g) => `⚠ התאוששות אגרסיבית: עומס חיובי כבד של ${g}G מופעל על גוף המטוס והנוסעים!`,
+            metric_alt: "גובה (ALT)",
+            metric_gs: "מהירות (GS)",
+            metric_vs: "אנכי (VS)",
+            metric_pitch: "זווית (γ)",
+            metric_g: "עומס (G)",
+            chart_title: "פרופיל גובה, מהירות ועומסי G מסונכרנים (עם סמן חי)",
+            chart_alt_label: "גובה (רגל)",
+            chart_gs_label: "מהירות קרקעית (קשר)",
+            chart_g_label: "עומס כבידה (G)",
+            chart_gs_axis: "מהירות (קשר)",
+            chart_g_axis: "עומס (G)",
+            key_events_title: "אירועי מפתח",
+            events: {
+                ev_1: "<strong>תחילת אירוע החירום:</strong> שיוט אחרון ב-34,000 רגל, תחילת מאבק.",
+                ev_2: "<strong>צלילה חופשית:</strong> צניחה ב-<strong>-32,640 רגל/דקה</strong>, עומס 0G.",
+                ev_3: "<strong>מהירות שיא בתחתית:</strong> 16,600 רגל במהירות <strong>598 קשר</strong>.",
+                ev_4: "<strong>משיכת חרום (Pull-Up):</strong> עומס של <strong>+2.8G</strong> ונסיקה ל-21,725 רגל.",
+                ev_5: "<strong>צלילה שנייה:</strong> צניחה נוספת עד ל-14,950 רגל.",
+                ev_6: "<strong>השתלטות וייצוב:</strong> מיוצב ב-14,500 רגל לקראת פנייה לתבוכ.",
+                ev_7: "<strong>המראה מדובאי (DXB):</strong> ריצת מסלול וטיפוס.",
+                ev_8: "<strong>נחיתת חירום:</strong> נגיעה במסלול בתבוכ (TUU)."
+            },
+            btn_play: "▶ הפעל בזמן אמת (1:1)",
+            btn_pause: "⏸ השהה סימולציה",
+            jump_0521: "05:21 תחילת מאבק",
+            jump_0522_dive: "05:22 צלילה חופשית",
+            jump_0522_g: "05:22 משיכת G",
+            jump_0523_dive: "05:23 צלילה שנייה",
+            jump_0525_stable: "05:25 ייצוב",
+            jump_takeoff: "03:05 המראה",
+            jump_landing: "06:55 נחיתה",
+            label_speed: "מהירות:",
+            speed_1x: "1x (זמן אמת)",
+            csv_success: (n) => `קובץ CSV נטען בהצלחה! ${n} נקודות ADS-B עובדו.`,
+            csv_empty: "שגיאה: לא נמצאו שורות תקינות בקובץ CSV.",
+            csv_err: (msg) => `שגיאה בפענוח קובץ ה-CSV: ${msg}`
+        },
+        en: {
+            title: "Flight FDB1073 Simulator - Real-Time 1:1 ADS-B Telemetry Replay",
+            app_title: "Flight FDB1073 Simulator (A6-FKF)",
+            app_subtitle: "Second-by-second ADS-B telemetry reconstruction | Dubai ➔ Tabuk",
+            load_csv: "📁 Load CSV File",
+            status_realtime: "Real-Time (1x)",
+            side_view_title: "Lateral Pitch & Attitude Profile",
+            pitch_angle_prefix: "Pitch Angle: ",
+            nose_direction: "➔ Nose Right",
+            attitude_indicator_title: "Attitude Indicator (Artificial Horizon)",
+            g_load_mini: "G-Force Load",
+            controls_status_mini: "Elevator / Control",
+            control_neutral: "Neutral / Trimmed",
+            control_pitch_down: "Violent Nose Down Pitch",
+            control_pitch_up: "Massive Pull-Up Maneuver",
+            control_climb: "Sharp Climb",
+            status_catastrophic_dive: "Catastrophic Dive!",
+            status_heavy_pullup: "Heavy Pull-Up G-Load",
+            status_climbing: "Climbing",
+            status_on_ground: "On Ground",
+            status_steady_cruise: "Steady Cruise",
+            status_controlled_flight: "Controlled Flight",
+            banner_critical: (pitch, vs) => `⚠ CRITICAL ALERT: Extreme dive angle ${pitch}° with descent rate of ${vs} FPM!`,
+            banner_warning: (g) => `⚠ AGGRESSIVE RECOVERY: Severe positive load of ${g}G sustained by airframe & passengers!`,
+            metric_alt: "Altitude (ALT)",
+            metric_gs: "Ground Speed (GS)",
+            metric_vs: "Vertical Speed (VS)",
+            metric_pitch: "Pitch (γ)",
+            metric_g: "G-Force (G)",
+            chart_title: "Synchronized Altitude, Speed & G-Force Profiles (Live Cursor)",
+            chart_alt_label: "Altitude (ft)",
+            chart_gs_label: "Ground Speed (kts)",
+            chart_g_label: "G-Force Load (G)",
+            chart_gs_axis: "Speed (kts)",
+            chart_g_axis: "Load (G)",
+            key_events_title: "Key Timeline Events",
+            events: {
+                ev_1: "<strong>In-Flight Emergency Inception:</strong> Cruising FL340, struggle commences.",
+                ev_2: "<strong>Near Vertical Dive:</strong> Plunging at <strong>-32,640 FPM</strong>, zero-G state.",
+                ev_3: "<strong>VNE Overspeed at Trough:</strong> 16,600 ft at terminal speed <strong>598 kts</strong>.",
+                ev_4: "<strong>Emergency Pull-Up:</strong> Maximum load factor <strong>+2.8G</strong> climbing to 21,725 ft.",
+                ev_5: "<strong>Secondary Dive:</strong> Second altitude loss dropping to 14,950 ft.",
+                ev_6: "<strong>Stabilization & Control:</strong> Leveled off at 14,500 ft diverting to Tabuk.",
+                ev_7: "<strong>Dubai Departure (DXB):</strong> Runway takeoff roll and initial climb.",
+                ev_8: "<strong>Emergency Landing:</strong> Touchdown rollout at Tabuk (TUU)."
+            },
+            btn_play: "▶ Play Real-Time (1:1)",
+            btn_pause: "⏸ Pause Simulation",
+            jump_0521: "05:21 Incident Start",
+            jump_0522_dive: "05:22 Severe Dive",
+            jump_0522_g: "05:22 +2.8G Pull-Up",
+            jump_0523_dive: "05:23 2nd Dive",
+            jump_0525_stable: "05:25 Leveled Off",
+            jump_takeoff: "03:05 Takeoff",
+            jump_landing: "06:55 Landing",
+            label_speed: "Speed:",
+            speed_1x: "1x (Real-time)",
+            csv_success: (n) => `CSV file loaded successfully! ${n} ADS-B data points processed.`,
+            csv_empty: "Error: No valid ADS-B records found in CSV.",
+            csv_err: (msg) => `Error parsing CSV file: ${msg}`
+        }
+    };
+
+    // Detect default user language: check localStorage, otherwise navigator.language
+    function detectInitialLanguage() {
+        const saved = localStorage.getItem('fdb1073_lang');
+        if (saved && (saved === 'he' || saved === 'en')) return saved;
+        const navLang = (navigator.language || navigator.userLanguage || 'he').toLowerCase();
+        return navLang.startsWith('he') ? 'he' : 'en';
+    }
+
+    let currentLang = detectInitialLanguage();
+
+    function setLanguage(lang) {
+        if (!i18n[lang]) lang = 'he';
+        currentLang = lang;
+        localStorage.setItem('fdb1073_lang', lang);
+
+        document.documentElement.lang = lang;
+        document.documentElement.dir = (lang === 'he') ? 'rtl' : 'ltr';
+        document.title = i18n[lang].title;
+
+        const langSelect = document.getElementById('langSelect');
+        if (langSelect) langSelect.value = lang;
+
+        // Update all data-i18n static text elements
+        document.querySelectorAll('[data-i18n]').forEach(el => {
+            const key = el.getAttribute('data-i18n');
+            if (i18n[lang][key]) {
+                el.innerText = i18n[lang][key];
+            }
+        });
+
+        // Update event items
+        document.querySelectorAll('[data-i18n-event]').forEach(el => {
+            const evKey = el.getAttribute('data-i18n-event');
+            if (i18n[lang].events && i18n[lang].events[evKey]) {
+                el.innerHTML = i18n[lang].events[evKey];
+            }
+        });
+
+        // Update play/pause button state
+        const btn = document.getElementById('btnPlayPause');
+        if (btn) {
+            btn.innerText = isPlaying ? i18n[lang].btn_pause : i18n[lang].btn_play;
+        }
+
+        // Re-render chart dataset labels and scales if initialized
+        if (altChart && dynChart) {
+            altChart.data.datasets[0].label = i18n[lang].chart_alt_label;
+            altChart.options.scales.y.position = (lang === 'he') ? 'right' : 'left';
+            altChart.update('none');
+
+            dynChart.data.datasets[0].label = i18n[lang].chart_gs_label;
+            dynChart.data.datasets[1].label = i18n[lang].chart_g_label;
+            dynChart.options.scales.yGS.title.text = i18n[lang].chart_gs_axis;
+            dynChart.options.scales.yG.title.text = i18n[lang].chart_g_axis;
+            if (lang === 'he') {
+                dynChart.options.scales.yGS.position = 'left';
+                dynChart.options.scales.yG.position = 'right';
+            } else {
+                dynChart.options.scales.yGS.position = 'left';
+                dynChart.options.scales.yG.position = 'right';
+            }
+            dynChart.update('none');
+        }
+
+        // Refresh telemetry badges & labels with current index
+        if (flightData && flightData.length > 0) {
+            updateUI(currentIndex);
+        }
+    }
+
+    // Global flight dataset
+    window.flightData = window.flightData || [];
+    var flightData = window.flightData;
+    let currentIndex = 0;
+    let isPlaying = false;
+    let animTimeout = null;
+
+    // Charts
+    let altChart = null;
+    let dynChart = null;
+
+    const verticalLinePlugin = {
+        id: 'verticalLineCursor',
+        afterDraw: (chart) => {
+            if (!flightData || currentIndex < 0 || currentIndex >= flightData.length) return;
+            const ctx = chart.ctx;
+            const meta = chart.getDatasetMeta(0);
+            if (!meta || !meta.data || !meta.data[currentIndex]) return;
+            
+            const x = meta.data[currentIndex].x;
+            const topY = chart.chartArea.top;
+            const bottomY = chart.chartArea.bottom;
+
+            ctx.save();
+            ctx.beginPath();
+            ctx.moveTo(x, topY);
+            ctx.lineTo(x, bottomY);
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = '#00f2fe';
+            ctx.shadowColor = '#00f2fe';
+            ctx.shadowBlur = 8;
+            ctx.setLineDash([5, 3]);
+            ctx.stroke();
+
+            for (let i = 0; i < chart.data.datasets.length; i++) {
+                const dMeta = chart.getDatasetMeta(i);
+                if (dMeta && dMeta.data[currentIndex]) {
+                    const point = dMeta.data[currentIndex];
+                    ctx.beginPath();
+                    ctx.arc(point.x, point.y, 4, 0, 2 * Math.PI);
+                    ctx.fillStyle = chart.data.datasets[i].borderColor || '#00f2fe';
+                    ctx.shadowColor = ctx.fillStyle;
+                    ctx.shadowBlur = 8;
+                    ctx.fill();
+                    ctx.lineWidth = 1.5;
+                    ctx.strokeStyle = '#ffffff';
+                    ctx.stroke();
+                }
+            }
+
+            ctx.restore();
+        }
+    };
+
+    Chart.register(verticalLinePlugin);
+
+    // CSV Raw ADS-B Parser (exact matching Python calculation)
+    function parseCsvData(csvText) {
+        const results = Papa.parse(csvText, { header: true, skipEmptyLines: true });
+        const rows = results.data;
+        if (!rows || rows.length === 0) return [];
+
+        let lastAlt = 0.0, lastGs = 0.0, lastVs = 0.0;
+        const cleaned = [];
+
+        for (let i = 0; i < rows.length; i++) {
+            const r = rows[i];
+            const tsStr = r.timestamp || '';
+            if (!tsStr) continue;
+
+            const tMatch = tsStr.match(/(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2}):(\d{2})Z?(\.\d+)?/);
+            if (!tMatch) continue;
+
+            const dUtc = new Date(Date.UTC(
+                parseInt(tMatch[1]), parseInt(tMatch[2]) - 1, parseInt(tMatch[3]),
+                parseInt(tMatch[4]), parseInt(tMatch[5]), parseInt(tMatch[6]),
+                tMatch[7] ? Math.round(parseFloat(tMatch[7]) * 1000) : 0
+            ));
+            const epochSec = dUtc.getTime() / 1000.0;
+            const timeStr = `${tMatch[4]}:${tMatch[5]}:${tMatch[6]}`;
+
+            const altVal = (r.altitude !== undefined && r.altitude !== '') ? parseFloat(r.altitude) : null;
+            const gsVal = (r.ground_speed !== undefined && r.ground_speed !== '') ? parseFloat(r.ground_speed) : null;
+            const vsVal = (r.vertical_speed !== undefined && r.vertical_speed !== '') ? parseFloat(r.vertical_speed) : null;
+
+            if (altVal === null && gsVal === null && vsVal === null) continue;
+
+            if (altVal !== null) lastAlt = altVal;
+            if (gsVal !== null) lastGs = gsVal;
+            if (vsVal !== null) lastVs = vsVal;
+
+            cleaned.push({
+                ts: tsStr,
+                t: epochSec,
+                time_str: timeStr,
+                alt: lastAlt,
+                gs: lastGs,
+                vs: lastVs,
+                flight_path_angle: 0.0,
+                g_force: 1.0
+            });
+        }
+
+        // Calculate pitch angle and vertical G load factor
+        for (let i = 0; i < cleaned.length; i++) {
+            const pt = cleaned[i];
+            const vFpm = pt.vs;
+            const gsKts = pt.gs;
+            const vFps = vFpm / 60.0;
+            const gsFps = gsKts * 1.68781;
+
+            if (gsFps > 20.0) {
+                const angleRad = Math.atan2(vFps, gsFps);
+                pt.flight_path_angle = Math.round((angleRad * (180.0 / Math.PI)) * 10) / 10;
+            } else {
+                pt.flight_path_angle = 0.0;
+            }
+
+            if (i > 0) {
+                const prev = cleaned[i - 1];
+                const dt = pt.t - prev.t;
+                if (dt > 0.05 && dt < 10.0) {
+                    const prevVfps = prev.vs / 60.0;
+                    const az = (vFps - prevVfps) / dt;
+                    const g = 1.0 + (az / 32.174);
+                    pt.g_force = Math.round(Math.max(-1.5, Math.min(4.5, g)) * 100) / 100;
+                } else {
+                    pt.g_force = prev.g_force;
+                }
+            } else {
+                pt.g_force = 1.0;
+            }
+        }
+
+        return cleaned;
+    }
+
+    function initCharts() {
+        if (!flightData || flightData.length === 0) return;
+
+        const labels = flightData.map(d => d.time_str);
+        const altData = flightData.map(d => d.alt);
+        const gsData = flightData.map(d => d.gs);
+        const gData = flightData.map(d => d.g_force);
+
+        if (altChart) altChart.destroy();
+        if (dynChart) dynChart.destroy();
+
+        const ctxAlt = document.getElementById('altitudeChart').getContext('2d');
+        altChart = new Chart(ctxAlt, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'גובה (רגל)',
+                    data: altData,
+                    borderColor: '#00f2fe',
+                    backgroundColor: 'rgba(0, 242, 254, 0.08)',
+                    borderWidth: 1.5,
+                    fill: true,
+                    tension: 0.1,
+                    pointRadius: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: false,
+                plugins: {
+                    legend: { labels: { color: '#94a3b8' } },
+                    tooltip: { mode: 'index', intersect: false }
+                },
+                scales: {
+                    x: {
+                        ticks: { color: '#64748b', maxTicksLimit: 14 },
+                        grid: { color: 'rgba(255,255,255,0.05)' }
+                    },
+                    y: {
+                        position: 'right',
+                        ticks: { color: '#64748b' },
+                        grid: { color: 'rgba(255,255,255,0.05)' }
+                    }
+                }
+            }
+        });
+
+        const ctxDyn = document.getElementById('dynamicsChart').getContext('2d');
+        dynChart = new Chart(ctxDyn, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'מהירות קרקעית (קשר)',
+                        data: gsData,
+                        borderColor: '#4facfe',
+                        borderWidth: 1.2,
+                        yAxisID: 'yGS',
+                        pointRadius: 0
+                    },
+                    {
+                        label: 'עומס כבידה (G)',
+                        data: gData,
+                        borderColor: '#ff3366',
+                        borderWidth: 1.2,
+                        yAxisID: 'yG',
+                        pointRadius: 0
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: false,
+                plugins: {
+                    legend: { labels: { color: '#94a3b8' } }
+                },
+                scales: {
+                    x: {
+                        ticks: { color: '#64748b', maxTicksLimit: 14 },
+                        grid: { color: 'rgba(255,255,255,0.05)' }
+                    },
+                    yGS: {
+                        type: 'linear',
+                        position: 'left',
+                        title: { display: true, text: 'מהירות (קשר)', color: '#4facfe' },
+                        ticks: { color: '#4facfe' },
+                        grid: { color: 'rgba(255,255,255,0.05)' }
+                    },
+                    yG: {
+                        type: 'linear',
+                        position: 'right',
+                        title: { display: true, text: 'עומס (G)', color: '#ff3366' },
+                        ticks: { color: '#ff3366' },
+                        grid: { drawOnChartArea: false }
+                    }
+                }
+            }
+        });
+
+        const clickJump = (evt, chart) => {
+            const points = chart.getElementsAtEventForMode(evt, 'index', { intersect: false }, false);
+            if (points.length) {
+                currentIndex = points[0].index;
+                updateUI(currentIndex);
+            }
+        };
+        document.getElementById('altitudeChart').onclick = (e) => clickJump(e, altChart);
+        document.getElementById('dynamicsChart').onclick = (e) => clickJump(e, dynChart);
+
+        const slider = document.getElementById('timeSlider');
+        slider.max = flightData.length - 1;
+    }
+
+    function updateUI(idx) {
+        if (!flightData || idx < 0 || idx >= flightData.length) return;
+        const d = flightData[idx];
+
+        const pitchText = (d.flight_path_angle > 0 ? '+' : '') + d.flight_path_angle + '°';
+        document.getElementById('valPitch').innerText = pitchText;
+        document.getElementById('valPitchAttitude').innerText = pitchText;
+        document.getElementById('sideAngleTag').innerText = 'PITCH: ' + pitchText;
+        const t = i18n[currentLang];
+        document.getElementById('sideViewMode').innerText = t.pitch_angle_prefix + pitchText;
+
+        document.getElementById('valG').innerText = d.g_force.toFixed(2) + ' G';
+        document.getElementById('valGAttitude').innerText = d.g_force.toFixed(2) + ' G';
+        document.getElementById('valAlt').innerText = Number(d.alt).toLocaleString() + ' ft';
+        document.getElementById('valGS').innerText = Math.round(d.gs) + ' kts';
+        document.getElementById('valVS').innerText = (d.vs > 0 ? '+' : '') + Math.round(d.vs).toLocaleString() + ' fpm';
+        document.getElementById('currentTimeDisplay').innerText = d.ts;
+        document.getElementById('chartCursorTime').innerText = d.ts;
+
+        const cssRotation = -d.flight_path_angle;
+        const altNorm = (d.alt - 17000) / 17000;
+        const sideYOffset = -altNorm * 35;
+        document.getElementById('sideAirplane').style.transform = `translateY(${sideYOffset}px) rotate(${cssRotation}deg)`;
+
+        const pitchElem = document.getElementById('valPitch');
+        const gElem = document.getElementById('valG');
+        const vsElem = document.getElementById('valVS');
+        const badge = document.getElementById('flightStateBadge');
+        const alertBanner = document.getElementById('alertBanner');
+        const controlState = document.getElementById('valControlState');
+
+        if (d.flight_path_angle < -15 || d.vs < -15000) {
+            pitchElem.classList.add('alert');
+            vsElem.classList.add('alert');
+            badge.innerText = t.status_catastrophic_dive;
+            badge.style.background = 'rgba(255, 51, 102, 0.4)';
+            controlState.innerText = t.control_pitch_down;
+            controlState.style.color = 'var(--accent-red)';
+            alertBanner.className = 'flight-alert-banner critical active';
+            alertBanner.innerText = t.banner_critical(Math.abs(d.flight_path_angle), Math.round(d.vs).toLocaleString());
+        } else if (d.g_force > 2.2) {
+            gElem.classList.add('alert');
+            badge.innerText = t.status_heavy_pullup;
+            badge.style.background = 'rgba(255, 170, 0, 0.4)';
+            controlState.innerText = t.control_pitch_up;
+            controlState.style.color = 'var(--accent-warning)';
+            alertBanner.className = 'flight-alert-banner warning active';
+            alertBanner.innerText = t.banner_warning(d.g_force.toFixed(2));
+        } else if (d.flight_path_angle > 5) {
+            controlState.innerText = t.control_climb;
+            controlState.style.color = 'var(--accent-cyan)';
+            badge.innerText = t.status_climbing;
+            alertBanner.className = 'flight-alert-banner';
+        } else {
+            pitchElem.classList.remove('alert');
+            gElem.classList.remove('alert');
+            vsElem.classList.remove('alert');
+            badge.innerText = d.alt < 500 ? t.status_on_ground : (d.alt > 30000 ? t.status_steady_cruise : t.status_controlled_flight);
+            badge.style.background = 'rgba(0, 242, 254, 0.15)';
+            controlState.innerText = t.control_neutral;
+            controlState.style.color = 'var(--accent-green)';
+            alertBanner.className = 'flight-alert-banner';
+        }
+
+        const horizonShift = d.flight_path_angle * 3.5;
+        document.getElementById('horizonSphere').style.transform = `translateY(${horizonShift}px)`;
+
+        document.getElementById('timeSlider').value = idx;
+
+        // Efficient cursor redraw without chart animation or lag
+        if (altChart && dynChart) {
+            altChart.update('none');
+            dynChart.update('none');
+        }
+    }
+
+    function jumpToTime(targetTimeStr) {
+        if (!flightData || flightData.length === 0) return;
+        const targetIndex = flightData.findIndex(d => d.time_str && d.time_str.startsWith(targetTimeStr));
+        if (targetIndex !== -1) {
+            currentIndex = targetIndex;
+            updateUI(currentIndex);
+        }
+    }
+
+    // REAL-TIME PLAYBACK ENGINE BASED ON EXACT RECORDED TIMESTAMPS
+    function scheduleNextFrame() {
+        if (!isPlaying || !flightData || currentIndex >= flightData.length - 1) {
+            if (flightData && currentIndex >= flightData.length - 1 && isPlaying) togglePlay();
+            return;
+        }
+
+        const currentPt = flightData[currentIndex];
+        const nextPt = flightData[currentIndex + 1];
+        
+        // Exact real recorded delta time in seconds
+        let dt = (nextPt && currentPt) ? (nextPt.t - currentPt.t) : 0.05;
+        if (dt <= 0) dt = 0.05; // Fallback for identical timestamp sub-records
+        if (dt > 10.0) dt = 1.0; // Avoid long pauses if coverage was lost
+
+        const speed = parseFloat(document.getElementById('playbackSpeed').value) || 1.0;
+        const delayMs = Math.max(10, (dt * 1000) / speed);
+
+        animTimeout = setTimeout(() => {
+            currentIndex++;
+            updateUI(currentIndex);
+            scheduleNextFrame();
+        }, delayMs);
+    }
+
+    function togglePlay() {
+        isPlaying = !isPlaying;
+        const btn = document.getElementById('btnPlayPause');
+        const t = i18n[currentLang];
+        if (isPlaying) {
+            btn.innerText = t.btn_pause;
+            btn.style.borderColor = 'var(--accent-red)';
+            scheduleNextFrame();
+        } else {
+            btn.innerText = t.btn_play;
+            btn.style.borderColor = 'var(--accent-cyan)';
+            if (animTimeout) clearTimeout(animTimeout);
+        }
+    }
+
+    const slider = document.getElementById('timeSlider');
+    slider.addEventListener('input', (e) => {
+        currentIndex = parseInt(e.target.value);
+        updateUI(currentIndex);
+    });
+
+    document.getElementById('btnPlayPause').addEventListener('click', togglePlay);
+    document.getElementById('playbackSpeed').addEventListener('change', () => {
+        if (isPlaying) {
+            if (animTimeout) clearTimeout(animTimeout);
+            scheduleNextFrame();
+        }
+    });
+
+    // Language dropdown change handler
+    document.getElementById('langSelect').addEventListener('change', (e) => {
+        setLanguage(e.target.value);
+    });
+
+    // CSV File Upload Handler
+    document.getElementById('csvFileInput').addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (evt) => {
+            const t = i18n[currentLang];
+            try {
+                const parsed = parseCsvData(evt.target.result);
+                if (parsed && parsed.length > 0) {
+                    if (isPlaying) togglePlay();
+                    flightData = parsed;
+                    window.flightData = parsed;
+                    initCharts();
+                    jumpToTime('05:21:00');
+                    alert(t.csv_success(parsed.length.toLocaleString()));
+                } else {
+                    alert(t.csv_empty);
+                }
+            } catch (err) {
+                alert(t.csv_err(err.message));
+            }
+        };
+        reader.readAsText(file);
+    });
+
+    // Automatically load flight_data.js or fetch original CSV
+    window.onload = () => {
+        setLanguage(currentLang);
+        if (window.flightData && window.flightData.length > 0) {
+            initCharts();
+            jumpToTime('05:21:00');
+        } else {
+            // Attempt to fetch Flightradar24 CSV directly if running on a local server
+            fetch('Flightradar24-Granular-Data-FZ1073-30-September-2026.csv')
+                .then(r => r.text())
+                .then(csv => {
+                    const parsed = parseCsvData(csv);
+                    if (parsed.length > 0) {
+                        flightData = parsed;
+                        window.flightData = parsed;
+                        initCharts();
+                        jumpToTime('05:21:00');
+                    }
+                })
+                .catch(() => {
+                    // Waiting for user to upload CSV
+                });
+        }
+    };
+</script>
+
+</body>
+</html>
