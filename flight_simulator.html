@@ -829,6 +829,10 @@
                         <div class="event-time">05:22:15 UTC</div>
                         <div class="event-desc" data-i18n-event="ev_2"><strong>צלילה חופשית:</strong> צניחה ב-<strong>-32,640 רגל/דקה</strong>, עומס 0G.</div>
                     </div>
+                    <div class="event-item severe" onclick="jumpToTime('05:22:25')">
+                        <div class="event-time">05:22:25 UTC</div>
+                        <div class="event-desc" data-i18n-event="ev_peak_g"><strong>שיא עומס כבידה (+4.25G):</strong> בלימת הצלילה ב-18,925 רגל, עומס פיזי קיצוני!</div>
+                    </div>
                     <div class="event-item severe" onclick="jumpToTime('05:22:36')">
                         <div class="event-time">05:22:36 UTC</div>
                         <div class="event-desc" data-i18n-event="ev_3"><strong>מהירות שיא בתחתית:</strong> 16,600 רגל במהירות <strong>598 קשר</strong>.</div>
@@ -873,6 +877,7 @@
             <button class="btn" id="btnPlayPause" data-i18n="btn_play">▶ הפעל בזמן אמת (1:1)</button>
             <button class="btn btn-jump" onclick="jumpToTime('05:21:00')" data-i18n="jump_0521">05:21 תחילת מאבק</button>
             <button class="btn btn-jump" onclick="jumpToTime('05:22:15')" data-i18n="jump_0522_dive">05:22 צלילה חופשית</button>
+            <button class="btn btn-jump" style="border-color: var(--accent-red); color: #ff80a0;" onclick="jumpToTime('05:22:25')" data-i18n="jump_0522_peak_g">05:22 שיא 4.25G</button>
             <button class="btn btn-jump" onclick="jumpToTime('05:22:50')" data-i18n="jump_0522_g">05:22 משיכת G</button>
             <button class="btn btn-jump" onclick="jumpToTime('05:23:40')" data-i18n="jump_0523_dive">05:23 צלילה שנייה</button>
             <button class="btn btn-jump" onclick="jumpToTime('05:25:00')" data-i18n="jump_0525_stable">05:25 ייצוב</button>
@@ -975,12 +980,75 @@
             control_pitch_down: "Violent Nose Down Pitch",
             control_pitch_up: "Massive Pull-Up Maneuver",
             control_climb: "Sharp Climb",
+            status_extreme_g: "עומס כבידה קיצוני (4.25G)!",
+            control_extreme_pullup: "משיכת חרום קיצונית מעבר למגבלות יצרן!",
+            banner_extreme_g: (g) => `🚨 עומס כבידה שיא: +${g}G! כוח כבידה חריג ביותר העלול לגרום לעילפון (G-LOC) ולכשל מבני!`,
+            banner_critical: (pitch, vs) => `⚠ אזהרת קריסה: ירידת חרטום חריפה בזווית ${pitch}° וקצב נפילה של ${vs} רגל לדקה!`,
+            banner_warning: (g) => `⚠ התאוששות אגרסיבית: עומס חיובי כבד של ${g}G מופעל על גוף המטוס והנוסעים!`,
+            metric_alt: "גובה (ALT)",
+            metric_gs: "מהירות (GS)",
+            metric_vs: "אנכי (VS)",
+            metric_pitch: "זווית (γ)",
+            metric_g: "עומס (G)",
+            chart_title: "פרופיל גובה, מהירות ועומסי G מסונכרנים (עם סמן חי)",
+            chart_alt_label: "גובה (רגל)",
+            chart_gs_label: "מהירות קרקעית (קשר)",
+            chart_g_label: "עומס כבידה (G)",
+            chart_gs_axis: "מהירות (קשר)",
+            chart_g_axis: "עומס (G)",
+            key_events_title: "אירועי מפתח",
+            events: {
+                ev_1: "<strong>תחילת אירוע החירום:</strong> שיוט אחרון ב-34,000 רגל, תחילת מאבק.",
+                ev_2: "<strong>צלילה חופשית:</strong> צניחה ב-<strong>-32,640 רגל/דקה</strong>, עומס 0G.",
+                ev_peak_g: "<strong>שיא עומס כבידה (+4.25G):</strong> בלימת הצלילה ב-18,925 רגל, עומס פיזי קיצוני!",
+                ev_3: "<strong>מהירות שיא בתחתית:</strong> 16,600 רגל במהירות <strong>598 קשר</strong>.",
+                ev_4: "<strong>משיכת חרום (Pull-Up):</strong> עומס של <strong>+2.8G</strong> ונסיקה ל-21,725 רגל.",
+                ev_5: "<strong>צלילה שנייה:</strong> צניחה נוספת עד ל-14,950 רגל.",
+                ev_6: "<strong>השתלטות וייצוב:</strong> מיוצב ב-14,500 רגל לקראת פנייה לתבוכ.",
+                ev_7: "<strong>המראה מדובאי (DXB):</strong> ריצת מסלול וטיפוס.",
+                ev_8: "<strong>נחיתת חירום:</strong> נגיעה במסלול בתבוכ (TUU)."
+            },
+            btn_play: "▶ הפעל בזמן אמת (1:1)",
+            btn_pause: "⏸ השהה סימולציה",
+            jump_0521: "05:21 תחילת מאבק",
+            jump_0522_dive: "05:22 צלילה חופשית",
+            jump_0522_peak_g: "05:22 שיא 4.25G",
+            jump_0522_g: "05:22 משיכת G",
+            jump_0523_dive: "05:23 צלילה שנייה",
+            jump_0525_stable: "05:25 ייצוב",
+            jump_takeoff: "03:05 המראה",
+            jump_landing: "06:55 נחיתה",
+            label_speed: "מהירות:",
+            speed_1x: "1x (זמן אמת)",
+            csv_success: (n) => `קובץ CSV נטען בהצלחה! ${n} נקודות ADS-B עובדו.`,
+            csv_empty: "שגיאה: לא נמצאו שורות תקינות בקובץ CSV.",
+            csv_err: (msg) => `שגיאה בפענוח קובץ ה-CSV: ${msg}`
+        },
+        en: {
+            title: "Flight FDB1073 Simulator - Real-Time 1:1 ADS-B Telemetry Replay",
+            app_title: "Flight FDB1073 Simulator (A6-FKF)",
+            app_subtitle: "Second-by-second ADS-B telemetry reconstruction | Dubai ➔ Tabuk",
+            load_csv: "📁 Load CSV File",
+            status_realtime: "Real-Time (1x)",
+            side_view_title: "Lateral Pitch & Attitude Profile",
+            pitch_angle_prefix: "Pitch Angle: ",
+            nose_direction: "➔ Nose Right",
+            attitude_indicator_title: "Attitude Indicator (Artificial Horizon)",
+            g_load_mini: "G-Force Load",
+            controls_status_mini: "Elevator / Control",
+            control_neutral: "Neutral / Trimmed",
+            control_pitch_down: "Violent Nose Down Pitch",
+            control_pitch_up: "Massive Pull-Up Maneuver",
+            control_extreme_pullup: "Extreme High-G Pull-Up (Beyond Limits)!",
+            control_climb: "Sharp Climb",
             status_catastrophic_dive: "Catastrophic Dive!",
             status_heavy_pullup: "Heavy Pull-Up G-Load",
+            status_extreme_g: "Extreme High-G Shock (+4.25G)!",
             status_climbing: "Climbing",
             status_on_ground: "On Ground",
             status_steady_cruise: "Steady Cruise",
             status_controlled_flight: "Controlled Flight",
+            banner_extreme_g: (g) => `🚨 PEAK LOAD FACTOR: +${g}G! Extreme positive G-forces exceeding airframe certification limits, severe G-LOC risk!`,
             banner_critical: (pitch, vs) => `⚠ CRITICAL ALERT: Extreme dive angle ${pitch}° with descent rate of ${vs} FPM!`,
             banner_warning: (g) => `⚠ AGGRESSIVE RECOVERY: Severe positive load of ${g}G sustained by airframe & passengers!`,
             metric_alt: "Altitude (ALT)",
@@ -998,6 +1066,7 @@
             events: {
                 ev_1: "<strong>In-Flight Emergency Inception:</strong> Cruising FL340, struggle commences.",
                 ev_2: "<strong>Near Vertical Dive:</strong> Plunging at <strong>-32,640 FPM</strong>, zero-G state.",
+                ev_peak_g: "<strong>Peak Load Factor (+4.25G):</strong> Violent pull-out arrest at 18,925 ft, maximum physical stress!",
                 ev_3: "<strong>VNE Overspeed at Trough:</strong> 16,600 ft at terminal speed <strong>598 kts</strong>.",
                 ev_4: "<strong>Emergency Pull-Up:</strong> Maximum load factor <strong>+2.8G</strong> climbing to 21,725 ft.",
                 ev_5: "<strong>Secondary Dive:</strong> Second altitude loss dropping to 14,950 ft.",
@@ -1009,6 +1078,7 @@
             btn_pause: "⏸ Pause Simulation",
             jump_0521: "05:21 Incident Start",
             jump_0522_dive: "05:22 Severe Dive",
+            jump_0522_peak_g: "05:22 Peak 4.25G",
             jump_0522_g: "05:22 +2.8G Pull-Up",
             jump_0523_dive: "05:23 2nd Dive",
             jump_0525_stable: "05:25 Leveled Off",
@@ -1377,7 +1447,15 @@
         const alertBanner = document.getElementById('alertBanner');
         const controlState = document.getElementById('valControlState');
 
-        if (d.flight_path_angle < -15 || d.vs < -15000) {
+        if (d.g_force >= 3.8) {
+            gElem.classList.add('alert');
+            badge.innerText = t.status_extreme_g || 'עומס כבידה קיצוני (4G+)!';
+            badge.style.background = 'rgba(255, 51, 102, 0.5)';
+            controlState.innerText = t.control_extreme_pullup || 'משיכת חרום קיצונית מעבר למגבלות יצרן!';
+            controlState.style.color = 'var(--accent-red)';
+            alertBanner.className = 'flight-alert-banner critical active';
+            alertBanner.innerText = t.banner_extreme_g ? t.banner_extreme_g(d.g_force.toFixed(2)) : `🚨 עומס כבידה שיא: ${d.g_force.toFixed(2)}G! עומס חריג העלול לגרום לעילפון (G-LOC) ולכשל מבני!`;
+        } else if (d.flight_path_angle < -15 || d.vs < -15000) {
             pitchElem.classList.add('alert');
             vsElem.classList.add('alert');
             badge.innerText = t.status_catastrophic_dive;
